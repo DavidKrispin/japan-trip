@@ -1,0 +1,33 @@
+---
+export interface Props {
+  title: string;
+}
+const { title } = Astro.props;
+---
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{title}</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🇯🇵</text></svg>" />
+</head>
+<body class="bg-gray-50 text-gray-900 min-h-screen font-sans">
+  <!-- Nav -->
+  <nav class="bg-white border-b border-gray-200 sticky top-0 z-50">
+    <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+      <a href="/" class="text-xl font-bold text-sakura-600 flex items-center gap-2">🇯🇵 הטיול שלנו</a>
+      <div class="flex gap-3 text-sm">
+        <a href="/" class="hover:text-sakura-600">סקירה</a>
+        <a href="/saved" class="hover:text-sakura-600">מקומות שמורים</a>
+        <a href="/admin/trip" class="hover:text-sakura-600 text-gray-400">⚙️</a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="max-w-5xl mx-auto px-4 py-6">
+    <slot />
+  </main>
+
+  <footer class="text-center text-xs text-gray-400 py-4">מתוכנן באהבה 🌸</footer>
+</body>
+</html>

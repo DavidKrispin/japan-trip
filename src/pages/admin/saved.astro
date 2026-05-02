@@ -1,0 +1,89 @@
+---
+import Base from '../../layouts/Base.astro';
+---
+<Base title="מקומות שמורים — ניהול">
+  <div>
+    <a href="/admin/trip" class="text-sm text-sakura-600 hover:underline">← חזרה לניהול</a>
+    <h1 class="text-2xl font-bold mt-2 mb-6">⭐ ניהול מקומות שמורים</h1>
+
+    <div id="places-list" class="space-y-3 mb-6"></div>
+
+    <form id="add-form" class="p-4 bg-white rounded-xl shadow-sm border border-gray-100 space-y-3">
+      <h3 class="font-bold text-sm">➕ הוסף מקום</h3>
+      <div class="grid grid-cols-2 gap-3">
+        <input id="p-name" type="text" class="px-3 py-2 border rounded-lg text-sm" placeholder="שם המקום" required />
+        <input id="p-city" type="text" class="px-3 py-2 border rounded-lg text-sm" placeholder="עיר" />
+      </div>
+      <div class="grid grid-cols-3 gap-3">
+        <input id="p-category" type="text" class="px-3 py-2 border rounded-lg text-sm" placeholder="קטגוריה (אוכל, טבע...)" />
+        <input id="p-duration" type="text" class="px-3 py-2 border rounded-lg text-sm" placeholder="משך ביקור" />
+        <input id="p-address" type="text" class="px-3 py-2 border rounded-lg text-sm" placeholder="כתובת" />
+      </div>
+      <textarea id="p-notes" rows="2" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="הערות / המלצה"></textarea>
+      <button type="submit" class="py-2 px-6 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700 text-sm">הוסף</button>
+    </form>
+  </div>
+
+  <script>
+    let places = [];
+
+    async function load() {
+      try {
+        const res = await fetch('/api/saved');
+        if (res.ok) {
+          const data = await res.json();
+          places = data.places || [];
+        }
+      } catch(e) {}
+      render();
+    }
+
+    function render() {
+      const el = document.getElementById('places-list');
+      el.innerHTML = places.map((p, i) => `
+        <div class="flex items-center justify-between p-3 bg-white rounded-lg border">
+          <div>
+            <span class="font-medium">${p.name}</span>
+            <span class="text-xs text-gray-400 mr-2">${p.city || ''} ${p.category ? '• ' + p.category : ''}</span>
+          </div>
+          <button data-idx="${i}" class="remove-place text-red-400 hover:text-red-600 text-sm">🗑️</button>
+        </div>
+      `).join('') || '<p class="text-gray-400 text-sm">אין מקומות</p>';
+
+      el.querySelectorAll('.remove-place').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const idx = parseInt(btn.dataset.idx);
+          places.splice(idx, 1);
+          await save();
+          render();
+        });
+      });
+    }
+
+    async function save() {
+      await fetch('/api/saved', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ places })
+      });
+    }
+
+    document.getElementById('add-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      places.push({
+        id: 'place-' + Date.now(),
+        name: document.getElementById('p-name').value,
+        city: document.getElementById('p-city').value,
+        category: document.getElementById('p-category').value,
+        duration: document.getElementById('p-duration').value,
+        address: document.getElementById('p-address').value,
+        notes: document.getElementById('p-notes').value,
+      });
+      await save();
+      render();
+      document.getElementById('add-form').reset();
+    });
+
+    load();
+  </script>
+</Base>

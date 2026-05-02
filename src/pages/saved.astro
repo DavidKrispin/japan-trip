@@ -1,0 +1,52 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base title="מקומות שמורים">
+  <div>
+    <h1 class="text-2xl font-bold mb-6">⭐ מקומות שמורים</h1>
+    <p class="text-gray-500 text-sm mb-6">המלצות ומקומות שווה ללכת אליהם — לא מקושרים ליום ספציפי</p>
+
+    <div id="loading" class="text-center py-8 text-gray-400">טוען...</div>
+    <div id="saved-list" class="hidden space-y-3"></div>
+    <div id="empty" class="hidden text-center py-12 text-gray-400">אין מקומות שמורים. הוסיפו דרך ⚙️</div>
+  </div>
+
+  <script>
+    async function load() {
+      try {
+        const res = await fetch('/api/saved');
+        if (!res.ok) throw new Error(res.status);
+        const data = await res.json();
+        render(data.places || []);
+      } catch(e) {
+        document.getElementById('loading').textContent = 'שגיאה בטעינה';
+      }
+    }
+
+    function render(places) {
+      document.getElementById('loading').classList.add('hidden');
+      if (places.length === 0) {
+        document.getElementById('empty').classList.remove('hidden');
+        return;
+      }
+      const el = document.getElementById('saved-list');
+      el.classList.remove('hidden');
+      el.innerHTML = places.map(p => `
+        <div class="p-4 bg-white rounded-xl shadow-sm border border-gray-100">
+          <div class="flex items-start justify-between">
+            <div>
+              <h3 class="font-bold">${p.name}</h3>
+              ${p.city ? `<span class="text-xs text-gray-400">${p.city}</span>` : ''}
+              ${p.category ? `<span class="text-xs bg-sakura-50 text-sakura-600 px-2 py-0.5 rounded-full mr-2">${p.category}</span>` : ''}
+              ${p.duration ? `<span class="text-xs text-gray-400">⏱️ ${p.duration}</span>` : ''}
+            </div>
+            <a href="https://www.google.com/maps/search/${encodeURIComponent(p.name + ' ' + (p.address || p.city || 'Japan'))}" target="_blank" class="text-blue-500 text-sm hover:underline shrink-0">📍 מפה</a>
+          </div>
+          ${p.notes ? `<p class="text-sm text-gray-500 mt-2">${p.notes}</p>` : ''}
+        </div>
+      `).join('');
+    }
+
+    load();
+  </script>
+</Base>

@@ -1,0 +1,98 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base title="הטיול שלנו ליפן 🇯🇵">
+  <div id="app">
+    <div id="loading" class="text-center py-12 text-gray-400">טוען...</div>
+    <div id="content" class="hidden">
+      <!-- Trip header -->
+      <div id="trip-header" class="mb-8 p-6 bg-white rounded-2xl shadow-sm border border-gray-100">
+        <h1 class="text-2xl font-bold mb-2" id="trip-name">הטיול שלנו ליפן</h1>
+        <p class="text-gray-500 text-sm" id="trip-dates"></p>
+        <div id="trip-regions" class="mt-3 flex flex-wrap gap-2"></div>
+      </div>
+
+      <!-- Timeline -->
+      <h2 class="text-lg font-bold mb-4">📅 ימי הטיול</h2>
+      <div id="days-list" class="space-y-3"></div>
+
+      <!-- Empty state -->
+      <div id="empty-state" class="hidden text-center py-12">
+        <p class="text-gray-400 text-lg mb-4">אין עדיין ימים בטיול</p>
+        <a href="/admin/trip" class="px-4 py-2 bg-sakura-600 text-white rounded-lg hover:bg-sakura-700">צור טיול חדש</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API = '/api/trip';
+
+    async function load() {
+      try {
+        const res = await fetch(API);
+        if (!res.ok) throw new Error(res.status);
+        const data = await res.json();
+        render(data);
+      } catch(e) {
+        // Try localStorage fallback
+        const cached = localStorage.getItem('trip-data');
+        if (cached) render(JSON.parse(cached));
+        else {
+          document.getElementById('loading').textContent = 'אין עדיין טיול. לכו ל-⚙️ כדי ליצור אחד.';
+        }
+      }
+    }
+
+    function render(data) {
+      document.getElementById('loading').classList.add('hidden');
+      document.getElementById('content').classList.remove('hidden');
+
+      if (!data || !data.trip) {
+        document.getElementById('empty-state').classList.remove('hidden');
+        return;
+      }
+
+      const trip = data.trip;
+      document.getElementById('trip-name').textContent = trip.name || 'הטיול שלנו ליפן';
+      document.getElementById('trip-dates').textContent = trip.startDate && trip.endDate
+        ? `${trip.startDate} → ${trip.endDate}`
+        : '';
+
+      // Regions
+      const regionsEl = document.getElementById('trip-regions');
+      if (trip.regions && trip.regions.length) {
+        regionsEl.innerHTML = trip.regions.map(r =>
+          `<span class="px-3 py-1 bg-japan-100 text-japan-700 rounded-full text-xs font-medium">${r.name} (${r.days} ימים)</span>`
+        ).join('');
+      }
+
+      // Days
+      const days = data.days || [];
+      const listEl = document.getElementById('days-list');
+      if (days.length === 0) {
+        document.getElementById('empty-state').classList.remove('hidden');
+        return;
+      }
+
+      listEl.innerHTML = days.map((day, i) => `
+        <a href="/day/?id=${day.id}" class="block p-4 bg-white rounded-xl shadow-sm border border-gray-100 hover:border-sakura-200 hover:shadow-md transition-all">
+          <div class="flex items-center justify-between">
+            <div>
+              <span class="text-xs text-gray-400">יום ${i + 1}</span>
+              <h3 class="font-bold">${day.title || day.date || 'יום ' + (i+1)}</h3>
+              <p class="text-sm text-gray-500">${day.city || ''} ${day.hotel ? '• 🏨 ' + day.hotel : ''}</p>
+            </div>
+            <div class="text-left">
+              <span class="text-xs text-gray-400">${day.attractions?.length || 0} אטרקציות</span>
+            </div>
+          </div>
+        </a>
+      `).join('');
+
+      // Cache
+      localStorage.setItem('trip-data', JSON.stringify(data));
+    }
+
+    load();
+  </script>
+</Base>
