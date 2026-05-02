@@ -6,7 +6,11 @@ const PARTITION = 'trip';
 
 function getClient() {
   const conn = process.env.TABLES_CONNECTION_STRING;
-  if (!conn) throw new Error('No TABLES_CONNECTION_STRING');
+  if (!conn) {
+    const err = new Error('TABLES_CONNECTION_STRING is not configured');
+    err.code = 'NO_CONNECTION_STRING';
+    throw err;
+  }
   return TableClient.fromConnectionString(conn, TABLE);
 }
 
@@ -23,6 +27,13 @@ function json(data, status = 200) {
   return cors({ status, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
 }
 
+function errorJson(e, status = 500) {
+  return json({
+    error: e.code || 'INTERNAL_ERROR',
+    message: e.message || String(e),
+  }, status);
+}
+
 async function ensureTable(client) {
   try { await client.createTable(); } catch(e) { if (e.statusCode !== 409) throw e; }
 }
@@ -32,7 +43,7 @@ app.http('getTrip', {
   route: 'trip',
   methods: ['GET', 'OPTIONS'],
   authLevel: 'anonymous',
-  handler: async (req) => {
+  handler: async (req, ctx) => {
     if (req.method === 'OPTIONS') return cors({ status: 204 });
     try {
       const client = getClient();
@@ -47,7 +58,8 @@ app.http('getTrip', {
       days.sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.dayNumber || 0) - (b.dayNumber || 0));
       return json({ trip, days });
     } catch(e) {
-      return json({ trip: null, days: [] });
+      ctx?.error?.('getTrip failed:', e);
+      return errorJson(e);
     }
   }
 });
@@ -57,16 +69,21 @@ app.http('putTrip', {
   route: 'trip',
   methods: ['PUT'],
   authLevel: 'anonymous',
-  handler: async (req) => {
-    const body = JSON.parse(await req.text());
-    const client = getClient();
-    await ensureTable(client);
-    await client.upsertEntity({
-      partitionKey: PARTITION,
-      rowKey: '__trip__',
-      data: JSON.stringify(body.trip || {})
-    }, 'Replace');
-    return json({ ok: true });
+  handler: async (req, ctx) => {
+    try {
+      const body = JSON.parse(await req.text());
+      const client = getClient();
+      await ensureTable(client);
+      await client.upsertEntity({
+        partitionKey: PARTITION,
+        rowKey: '__trip__',
+        data: JSON.stringify(body.trip || {})
+      }, 'Replace');
+      return json({ ok: true });
+    } catch(e) {
+      ctx?.error?.('putTrip failed:', e);
+      return errorJson(e);
+    }
   }
 });
 
@@ -75,15 +92,18 @@ app.http('getDay', {
   route: 'day/{id}',
   methods: ['GET', 'OPTIONS'],
   authLevel: 'anonymous',
-  handler: async (req) => {
+  handler: async (req, ctx) => {
     if (req.method === 'OPTIONS') return cors({ status: 204 });
     const id = req.params.id;
     try {
       const client = getClient();
+      await ensureTable(client);
       const entity = await client.getEntity(PARTITION, id);
       return json(JSON.parse(entity.data || '{}'));
     } catch(e) {
-      return json({ error: 'not found' }, 404);
+      if (e.statusCode === 404) return json({ error: 'NOT_FOUND', message: 'Day not found' }, 404);
+      ctx?.error?.('getDay failed:', e);
+      return errorJson(e);
     }
   }
 });
@@ -93,18 +113,23 @@ app.http('putDay', {
   route: 'day/{id}',
   methods: ['PUT'],
   authLevel: 'anonymous',
-  handler: async (req) => {
-    const id = req.params.id;
-    const body = JSON.parse(await req.text());
-    body.id = id;
-    const client = getClient();
-    await ensureTable(client);
-    await client.upsertEntity({
-      partitionKey: PARTITION,
-      rowKey: id,
-      data: JSON.stringify(body)
-    }, 'Replace');
-    return json({ ok: true });
+  handler: async (req, ctx) => {
+    try {
+      const id = req.params.id;
+      const body = JSON.parse(await req.text());
+      body.id = id;
+      const client = getClient();
+      await ensureTable(client);
+      await client.upsertEntity({
+        partitionKey: PARTITION,
+        rowKey: id,
+        data: JSON.stringify(body)
+      }, 'Replace');
+      return json({ ok: true });
+    } catch(e) {
+      ctx?.error?.('putDay failed:', e);
+      return errorJson(e);
+    }
   }
 });
 
@@ -113,13 +138,20 @@ app.http('deleteDay', {
   route: 'day/{id}',
   methods: ['DELETE'],
   authLevel: 'anonymous',
-  handler: async (req) => {
-    const id = req.params.id;
+  handler: async (req, ctx) => {
     try {
+      const id = req.params.id;
       const client = getClient();
-      await client.deleteEntity(PARTITION, id);
-    } catch(e) {}
-    return json({ ok: true });
+      try {
+        await client.deleteEntity(PARTITION, id);
+      } catch(e) {
+        if (e.statusCode !== 404) throw e;
+      }
+      return json({ ok: true });
+    } catch(e) {
+      ctx?.error?.('deleteDay failed:', e);
+      return errorJson(e);
+    }
   }
 });
 
@@ -128,14 +160,21 @@ app.http('getSaved', {
   route: 'saved',
   methods: ['GET', 'OPTIONS'],
   authLevel: 'anonymous',
-  handler: async (req) => {
+  handler: async (req, ctx) => {
     if (req.method === 'OPTIONS') return cors({ status: 204 });
     try {
       const client = getClient();
-      const entity = await client.getEntity(PARTITION, '__saved__');
-      return json(JSON.parse(entity.data || '{}'));
+      await ensureTable(client);
+      try {
+        const entity = await client.getEntity(PARTITION, '__saved__');
+        return json(JSON.parse(entity.data || '{"places":[]}'));
+      } catch(e) {
+        if (e.statusCode === 404) return json({ places: [] });
+        throw e;
+      }
     } catch(e) {
-      return json({ places: [] });
+      ctx?.error?.('getSaved failed:', e);
+      return errorJson(e);
     }
   }
 });
@@ -145,15 +184,35 @@ app.http('putSaved', {
   route: 'saved',
   methods: ['PUT'],
   authLevel: 'anonymous',
-  handler: async (req) => {
-    const body = JSON.parse(await req.text());
-    const client = getClient();
-    await ensureTable(client);
-    await client.upsertEntity({
-      partitionKey: PARTITION,
-      rowKey: '__saved__',
-      data: JSON.stringify(body)
-    }, 'Replace');
-    return json({ ok: true });
+  handler: async (req, ctx) => {
+    try {
+      const body = JSON.parse(await req.text());
+      const client = getClient();
+      await ensureTable(client);
+      await client.upsertEntity({
+        partitionKey: PARTITION,
+        rowKey: '__saved__',
+        data: JSON.stringify(body)
+      }, 'Replace');
+      return json({ ok: true });
+    } catch(e) {
+      ctx?.error?.('putSaved failed:', e);
+      return errorJson(e);
+    }
+  }
+});
+
+// GET /api/health — quick deployment sanity check
+app.http('health', {
+  route: 'health',
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  handler: async () => {
+    const hasConn = !!process.env.TABLES_CONNECTION_STRING;
+    return json({
+      ok: true,
+      hasConnectionString: hasConn,
+      time: new Date().toISOString(),
+    });
   }
 });

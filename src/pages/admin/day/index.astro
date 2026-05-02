@@ -33,8 +33,30 @@ import Base from '../../../layouts/Base.astro';
     if (!dayId) window.location.href = '/admin/trip';
     let dayData = {};
 
+    async function apiFetch(url, opts) {
+      const res = await fetch(url, opts);
+      const text = await res.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch(e) {}
+      if (!res.ok) {
+        const msg = (data && (data.message || data.error)) || `HTTP ${res.status}`;
+        const err = new Error(msg);
+        err.status = res.status;
+        throw err;
+      }
+      return data;
+    }
+
     async function load() {
-      try { const res = await fetch(`/api/day/${dayId}`); if (res.ok) dayData = await res.json(); } catch(e) {}
+      try {
+        dayData = await apiFetch(`/api/day/${dayId}`);
+      } catch(e) {
+        if (e.status !== 404) {
+          console.error('load day failed:', e);
+          alert('⚠️ טעינת היום נכשלה: ' + e.message);
+        }
+        dayData = {};
+      }
       fillForm();
     }
 
@@ -89,14 +111,29 @@ import Base from '../../../layouts/Base.astro';
       const day = { id: dayId, title: document.getElementById('day-title').value, date: document.getElementById('day-date').value,
         city: document.getElementById('day-city').value, hotel: document.getElementById('day-hotel').value,
         hotelConfirmation: document.getElementById('day-hotel-conf').value, notes: document.getElementById('day-notes').value, attractions, tickets };
-      await fetch(`/api/day/${dayId}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(day) });
-      alert('נשמר!');
+      const btn = e.submitter;
+      if (btn) { btn.disabled = true; }
+      try {
+        await apiFetch(`/api/day/${dayId}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(day) });
+        await load();
+        alert('✅ נשמר!');
+      } catch(err) {
+        console.error('save day failed:', err);
+        alert('❌ שמירה נכשלה: ' + err.message);
+      } finally {
+        if (btn) { btn.disabled = false; }
+      }
     });
 
     document.getElementById('delete-btn').addEventListener('click', async () => {
       if (!confirm('למחוק?')) return;
-      await fetch(`/api/day/${dayId}`, { method: 'DELETE' });
-      window.location.href = '/admin/trip';
+      try {
+        await apiFetch(`/api/day/${dayId}`, { method: 'DELETE' });
+        window.location.href = '/admin/trip';
+      } catch(err) {
+        console.error('delete failed:', err);
+        alert('❌ מחיקה נכשלה: ' + err.message);
+      }
     });
 
     load();

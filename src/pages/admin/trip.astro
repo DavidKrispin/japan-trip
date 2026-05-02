@@ -44,11 +44,29 @@ import Base from '../../layouts/Base.astro';
   <script>
     let tripData = { trip: {}, days: [] };
 
+    async function apiFetch(url, opts) {
+      const res = await fetch(url, opts);
+      const text = await res.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch(e) {}
+      if (!res.ok) {
+        const msg = (data && (data.message || data.error)) || `HTTP ${res.status}`;
+        const err = new Error(msg);
+        err.status = res.status;
+        err.body = data;
+        throw err;
+      }
+      return data;
+    }
+
     async function loadTrip() {
       try {
-        const res = await fetch('/api/trip');
-        if (res.ok) tripData = await res.json();
-      } catch(e) {}
+        tripData = await apiFetch('/api/trip');
+      } catch(e) {
+        console.error('loadTrip failed:', e);
+        alert('⚠️ טעינת הטיול נכשלה: ' + e.message);
+        tripData = { trip: {}, days: [] };
+      }
       fillForm();
       renderDays();
     }
@@ -86,24 +104,39 @@ import Base from '../../layouts/Base.astro';
         endDate: document.getElementById('trip-end').value,
         regions
       };
-      await fetch('/api/trip', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trip })
-      });
-      alert('נשמר!');
+      const btn = e.submitter;
+      if (btn) { btn.disabled = true; btn.textContent = '💾 שומר...'; }
+      try {
+        await apiFetch('/api/trip', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ trip })
+        });
+        await loadTrip();
+        alert('✅ נשמר!');
+      } catch(err) {
+        console.error('save trip failed:', err);
+        alert('❌ שמירה נכשלה: ' + err.message);
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '💾 שמור'; }
+      }
     });
 
     document.getElementById('add-day-btn').addEventListener('click', async () => {
       const id = 'day-' + Date.now();
       const dayNum = (tripData.days || []).length + 1;
       const day = { id, dayNumber: dayNum, title: '', city: '', date: '', hotel: '', attractions: [], tickets: [], notes: '' };
-      await fetch('/api/day/' + id, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(day)
-      });
-      window.location.href = '/admin/day/?id=' + id;
+      try {
+        await apiFetch('/api/day/' + id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(day)
+        });
+        window.location.href = '/admin/day/?id=' + id;
+      } catch(err) {
+        console.error('add day failed:', err);
+        alert('❌ הוספת יום נכשלה: ' + err.message);
+      }
     });
 
     loadTrip();

@@ -1,1 +1,6 @@
-node_modules\ndist\n.swa-token\n.astro
+node_modules
+dist
+.swa-token
+.astro
+api/local.settings.json
+api/node_modules

@@ -27,14 +27,29 @@ import Base from '../../layouts/Base.astro';
   <script>
     let places = [];
 
+    async function apiFetch(url, opts) {
+      const res = await fetch(url, opts);
+      const text = await res.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch(e) {}
+      if (!res.ok) {
+        const msg = (data && (data.message || data.error)) || `HTTP ${res.status}`;
+        const err = new Error(msg);
+        err.status = res.status;
+        throw err;
+      }
+      return data;
+    }
+
     async function load() {
       try {
-        const res = await fetch('/api/saved');
-        if (res.ok) {
-          const data = await res.json();
-          places = data.places || [];
-        }
-      } catch(e) {}
+        const data = await apiFetch('/api/saved');
+        places = (data && data.places) || [];
+      } catch(e) {
+        console.error('load saved failed:', e);
+        alert('⚠️ טעינת המקומות נכשלה: ' + e.message);
+        places = [];
+      }
       render();
     }
 
@@ -61,11 +76,18 @@ import Base from '../../layouts/Base.astro';
     }
 
     async function save() {
-      await fetch('/api/saved', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ places })
-      });
+      try {
+        await apiFetch('/api/saved', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ places })
+        });
+        return true;
+      } catch(e) {
+        console.error('save failed:', e);
+        alert('❌ שמירה נכשלה: ' + e.message);
+        return false;
+      }
     }
 
     document.getElementById('add-form').addEventListener('submit', async (e) => {
